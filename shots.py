@@ -7,18 +7,66 @@ import itertools
 import math
 import os
 import sys
+import time
+from copy import copy
 from collections import defaultdict, namedtuple
 import simplejson as json
 from operator import itemgetter
 
 from ipdb import set_trace
 
-# TODO
-Datum = namedtuple('Datum', (
+datum_fields = (
+    # Timestamp for when user hit y/n
+    'time',
+
     'username',
 
-    # bool: did they hit it?
-    'success'))
+    # Did they hit it? (bool)
+    'success',
+
+    # How much they paid to shoot.
+    'cost',
+
+    # What the pot is after the shot.
+    'pot',
+
+    # What the bank is after the shot.
+    'bank',
+
+    # What we want the bank to start at each round.
+    'target_bank', 
+
+    # Bailout funds available after the shot.
+    'bailout_funds',
+    
+    # Bailout funds used after the shot.
+    'bailout_funds_used',
+    
+    # dict from username to money won.
+    'winnings',
+
+    # dict from username to money owed.
+    'dues',
+
+    # How many shots have been taken overall.
+    'shots',
+    
+    # How many of those shots were hits.
+    'hits')
+
+
+class Datum(namedtuple('Datum', datum_fields)):
+    @staticmethod
+    def from_dict(d):
+        return Datum(**d)
+
+    @property
+    def to_dict(self):
+        return dict((field, getattr(self, field)) for field in self._fields)
+
+    def copy(self):
+        return Datum.from_dict(self.to_dict)
+
 
 def clear():
     os.system('clear')
@@ -30,7 +78,7 @@ def user_to_cost_str(data):
     return '\n'.join(s)
 
 
-# Don't really need all this...
+# Don't really need all this... Just 1-P(zero hits)
 def factorial(n):
     if n <= 2:
         return 1
@@ -42,8 +90,9 @@ def choose(n, k):
 def binomial_pmf(k, n, p):
     return choose(n, k) * p**k * (1 - p)**(n - k)
 
-def binomial_cdf(k, n, p):
-    return sum(binomial_pmf(i, n, p) for i in range(int(math.floor(k))))
+def probability_of_no_hits(num_shots, probability):
+    return 1 - binomial_pmf(0, num_shots, probability)
+
 
 def calculate_bank_proportion(
     bank,
@@ -72,20 +121,11 @@ def calculate_bank_proportion(
 
     # We want the number of shots before the probability of there being a hit is
     # greater than the threshold.
-    num_shots = 1
-    for num_trials in itertools.count(1): #TODO: func me
-        # Find the probability that any of the shots from the first until the
-        # `num_trials`th will be a success. If that probability is greater than
-        # the threshold, break and take the previous number.
-        # Note that upping this probability puts more money in the bank, so we
-        # should pipe it through from a top-level config.
-
-        # TODO: do 1 - probability of getting 0 hits
-        prob_of_a_hit = 1 - binomial_pmf(0, num_trials, probability)
-        if prob_of_a_hit > probability_of_success_threshold:
+    for num_shots in itertools.count(2): #TODO: func me
+        if probability_of_no_hits(num_shots, probability) > probability_of_success_threshold:
             break
 
-        num_shots += 1
+    num_shots -= 1
 
     # Ok, so `num_shots` is how many shots we think we will have to add
     # `target_bank - bank` to the bank. Let's iterate over possible proportions
@@ -101,9 +141,12 @@ def calculate_bank_proportion(
     while bank_proportion <= 0.99:
         bank_proportion += delta
 
+
+        money_needed = target_bank - bank
+
         expected_money_made =  \
-            simulate(target_bank - bank, bank_proportion, probability, pot, num_shots)
-        if expected_money_made >= target_bank:
+            simulate(money_needed, bank_proportion, probability, pot, num_shots)
+        if expected_money_made >= money_needed:
             return bank_proportion
 
     # If we get out of the loop it means that even if we put a large proportion 
@@ -112,157 +155,221 @@ def calculate_bank_proportion(
     return bank_proportion
 
 
+def calc_cost(hits, shots, pot):
+    probability = hits / shots
+    cost = probability * pot
+
+    # Round the cost to cents. Take the max of that and one cent.
+    return max(0.01, round(cost, 2))
+
 # TODO: comment and all that
+# TODO: does this make sense?
 def simulate(money_needed, bank_proportion, probability, pot, num_shots):
     money_banked = 0
     for _ in range(num_shots):
-        cost = probability * pot
+
+
         bank_fee = cost * bank_proportion
 
         money_banked += bank_fee
         pot += cost - bank_fee
 
     return money_banked
-        
-        
-        
 
 
-# TODO: rewrite the main loop to handle exits cleanly
-# TODO: serialize everything so that we don't lose track of money
+
+def read_data(filepath):
+    with open(filepath, 'r') as fh:
+        return json.load(fh)
+
+
+def show_debug(state):
+    probability = state.hits / state.shots
+    print '## Debug ##'
+    print 'probability: %f (%d of %d)' % (probability, state.hits, state.shots)
+    print 'pot:', state.pot
+    print 'bank:', state.bank
+    print 'bailout: used=%f, left=%f' % (state.bailout_funds_used, state.bailout_funds)
+    print
+
+    print '# Winnings #'
+    print user_to_cost_str(state.winnings)
+
+    print
+    print '# Dues #'
+    print user_to_cost_str(state.dues)
+    print
+    
+
 if __name__ == '__main__':
-    # Bank is savings to be used in the next pot. The pot is what's to be won
-    # when someone hits the bell.
-    bank = 0
-    pot = 10
+    input_data_filepath = sys.argv[1]
+    output_data_filepath = sys.argv[1]
+    data = read_data(input_data_filepath)
 
-    # This is what we aim for the next pot to began at right after someone wins.
-    target_bank = 10
+    state = Datum.from_dict(data[-1])
 
-    # If the bank hasn't grown enough when someone hits the bell then we turn
-    # to the government (currently dselassi and cpollock) to cover the
-    # difference. TODO: make sure we're not doing something dumb here.
-    bailout_funds = 10
+    try:
+        while True:
+            probability = state.hits / state.shots
+            pot = state.pot
+            bank = state.bank
 
+            winnings = dict(state.winnings)
+            dues = dict(state.dues)
+            shots = state.shots
 
-    # Prior of 0.02, to be updated after each shot.
-    hits = 2
-    shots = 100
+            bailout_funds = state.bailout_funds
+            bailout_funds_used = state.bailout_funds_used
 
+            hits = state.hits
 
-    # TODO: needs to be serialized. State should be rebuildable from data file.
-    winnings = defaultdict(float)
-    dues = defaultdict(float)
-    bailout_used = 0
+            cost = calc_cost(hits, shots, pot)
 
+            print 'Pay $%.2f for a chance to win $%.2f' % (cost, pot)
+            username = raw_input('Who are you (C to cancel)? ').strip()
+            if username.lower() == 'c':
+                continue
 
-    while True:
-        probability = hits / shots
-
-        cost = probability * pot
-        print 'Pay $%.2f for a chance to win $%.2f' % (cost, pot)
-        username = raw_input('Who are you? ')
-
-        hit_response = raw_input('Did you hit it (y/n/c)? ')
-        if hit_response == 'c':
-            print 'canceling'
-            continue
+            elif username.lower() == 'debug':
+                print
+                show_debug(state)
+                continue
 
 
-        elif hit_response == 'debug':
-            print '## Debug ##'
-            print 'probability: %f (%d of %d)' % (probability, hits, shots)
-            print 'pot:', pot
-            print 'bank:', bank
-            print 'bailout: used=%d, left=%d' % (bailout_used, bailout_funds)
-            print
-
-            print '# Winnings #'
-            print user_to_cost_str(winnings)
-
-            print
-            print '# Dues #'
-            print user_to_cost_str(dues)
-            print
-            continue
-
-        elif hit_response not in ('y', 'n'):
-            print 'Invalid. Try again'
-            continue
-
-
-        #
-        # Time to get real. Got either a hit or a miss.
-        #
-        dues[username] += cost
-
-        # We use the cost paid by the player for this shot to grow the pot, but
-        # we also want to put some money in the bank so that after a player hits
-        # the bell we can use money from the bank to replenish the pot. Without
-        # this we would need to use outside money to begin the pot.
-
-        # So, how do we split the money between the two? If the bank grows too
-        # slowly then we will occasionally begin new rounds with very small
-        # pots, which could make the game uninteresting (Pay $0.0001 for a
-        # a chance to win a few pennies!!!). If it grows too quickly then the
-        # pot won't grow very quickly. Also, if the bank grows faster than we
-        # anticipate then the current pot will remain small and the next one
-        # will be too big.
-
-        # One option here is to just manually set the proportion. E.g.:
-        #   proportion_for_bank = 0.1
-
-        # But instead we're doing something a bit more complicated. We figure out
-        # how many shots we'll likely see before a winner, then we find a bank
-        # proportion that will have us hit the desired bank in those shots.
-        proportion_for_bank = calculate_bank_proportion(bank, target_bank, probability, pot, cost)
-        bank += proportion_for_bank * cost
-        pot += (1 - proportion_for_bank) * cost
+            hit_response = raw_input('Did you hit it (y/n/cancel)? ')
+            if hit_response not in ('y', 'n'):
+                print >> sys.stderr, 'y or n plz'
+                continue
 
 
 
-        if hit_response == 'y':
-            hits += 1
+            # Time to get real. Got either a hit or a miss. Time to track new state
+            # for this shooter.
+
+            # Debit the user.
+            dues[username] = dues.get(username, 0) + cost
+
             shots += 1
+            if hit_response == 'y':
+                success = True
+                hits += 1
 
-            winnings[username] += pot
+                # Move the money from the pot to the user's credit.
+                winnings[username] = winnings.get(username, 0) + pot
+                pot = 0
 
-            # There's not enough in the bank. Time for a government bailout!
-            if bank < target_bank:
-                difference = target_bank - bank
+            elif hit_response == 'n':
+                success = False
 
-                # If we don't have enough to do a bailout, use the lesser of the
-                # remaining bailout funds and a single dollar. This single dollar
-                # is tracked so that the government pays up later.
-                if difference > bailout_funds:
-                    difference = max(bailout_funds, 1)
-
-                bailout_funds -= difference
-                bailout_used += difference
-                bank += difference
+            else:
+                assert False
 
 
-            # If we have more in the bank than needed, only use what's needed.
-            pot = min(target_bank, bank)
-            bank = bank - pot
+
+            # We use the cost paid by the player for this shot to grow the pot, but
+            # we also want to put some money in the bank so that after a player hits
+            # the bell we can use money from the bank to replenish the pot. Without
+            # this we would need to use outside money to begin the pot.
+
+            # So, how do we split the money between the two? If the bank grows too
+            # slowly then we will occasionally begin new rounds with very small
+            # pots, which could make the game uninteresting (Pay $0.0001 for a
+            # a chance to win a few pennies!!!). If it grows too quickly then the
+            # pot won't grow very quickly. Also, if the bank grows faster than we
+            # anticipate then the current pot will remain small and the next one
+            # will be too big.
+
+            # We figure out how many shots we'll likely see before a winner, then we
+            # find a bank proportion that will have us hit the desired bank in those
+            # shots.
+            proportion_for_bank =  \
+                calculate_bank_proportion(bank, state.target_bank, probability, pot, cost)
+
+            bank += proportion_for_bank * cost
+            pot += (1 - proportion_for_bank) * cost
+
+
+            # Now we've paid the user. If the user won, we need to replenish the pot.
+            if success:
+                needed = state.target_bank - pot
+
+                # There's not enough in the bank to reset the pot to our target.
+                # Time for a government bailout!
+                if bank < needed:
+                    difference = needed - bank
+                    # If we don't have enough bailout funds use the max of one
+                    # dollar and half of the remaining bailout funds. This means
+                    # it's possible for us to use a dollar that we don't have,
+                    # which means the game runners have to put up additional
+                    # dollars.
+                    if difference > bailout_funds:
+                        difference = max(1 / 2 * bailout_funds, 1)
+
+                    # Subtract from bailout funds, not letting it go beneath 0.
+                    bailout_funds = max(0, bailout_funds - difference)
+                    bailout_funds_used = bailout_funds_used + difference
+                    pot = bank + difference
+
+                # There is enough money in the bank.
+                else:
+                    pot += needed
+                    bank -= needed
+
+                    # No bailouts, but have to hackily pass these around.
+                    bailout_funds = bailout_funds
+                    bailout_funds_used = bailout_funds_used
+
+
 
             print '## Winnings ##'
             print user_to_cost_str(winnings)
             print
+            print
 
-
-        elif hit_response == 'n':
-            shots += 1
-
-        else:
-            assert False
-
-
-        print '## Dues ##'
-        print user_to_cost_str(dues)
+            print '## Dues ##'
+            print user_to_cost_str(dues)
+            print
+            print
 
 
 
-        print
-        print
-        print
+            new_state = Datum(
+                time=time.time(),
+                username=username,
+                success=success,
+
+                cost=cost,
+                pot=pot,
+                bank=bank,
+                bailout_funds=bailout_funds,
+                bailout_funds_used=bailout_funds_used,
+                winnings=winnings,
+                dues=dues,
+                shots=shots,
+                hits=hits,
+
+                # Constant
+                target_bank=state.target_bank,
+            )
+
+            data.append(new_state.to_dict)
+            state = new_state
+
+            init_pot = 5
+            money_won = sum(state.winnings.values())
+            money_spent = sum(state.dues.values())
+
+            first = money_spent + init_pot + state.bailout_funds_used
+            second = money_won + bank + pot
+#            set_trace()
+#            assert abs(first - second) < .01
+
+            
+    except EOFError:
+        print 'Exiting'
+        with open(output_data_filepath, 'w') as fh:
+            json.dump(data, fh, indent=2)
+        
+
+# TODO: rewrite the main loop to handle exits cleanly
+# TODO: serialize everything so that we don't lose track of money

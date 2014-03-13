@@ -1,0 +1,22 @@
+[
+    {
+        "time": 1394735812.899204,
+
+        "username": null,
+        "success": null,
+        "cost": null,
+
+        "pot": 5,
+        "bank": 0,
+        "target_bank": 5,
+        "bailout_funds": 20,
+        "bailout_funds_used": 0,
+
+        "shots": 100,
+        "hits": 2,
+
+        "winnings": {},
+
+        "dues": {}
+    }
+]

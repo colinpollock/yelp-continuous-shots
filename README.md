@@ -8,8 +8,6 @@ right away. The program displays two things:
 2) How much the shooter will win if they hit the bell.
 
 
-If necessary we can create a queue. 
-
 Details
 -------
 We track how many shots have been taken and how many of those have been hits. We
@@ -22,6 +20,14 @@ pot after someone wins. We try to put enough money into the bank so that by the
 time someone wins a round there'll be $10 ready.
 
 
+Rules?
+------
+* If necessary we can create a queue. 
+* Per-player hit probabilities?
+  * Good: low-skill players won't feel discouraged about their perceived chances
+    being below the overall probability.
+  * Bad: good players could tank to get a low probability when the pot is low
+    then pay little to shoot for a huge pot.
 
 TODO
 ----
@@ -30,6 +36,11 @@ TODO
 * We say that the user will win $POT, but then give them $POT + $COST. We should
   pay out and then put the cost back into the pot and bank.
 * Print out winners - dues for each user.
+
+* Computing the probability of not hitting the bell in N shots after each shot
+  messes this up.
+* Use only a part of the bailout funds, not all of it.
+
 * Clean up the code.
 
 
