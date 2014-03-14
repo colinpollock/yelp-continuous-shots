@@ -4,14 +4,15 @@
 from __future__ import division
 
 import itertools
+import simplejson as json
 import math
 import os
 import sys
 import time
 from copy import copy
 from collections import defaultdict, namedtuple
-import simplejson as json
 from operator import itemgetter
+from sys import stderr
 
 from ipdb import set_trace
 
@@ -203,7 +204,7 @@ def show_debug(state):
 
 if __name__ == '__main__':
     input_data_filepath = sys.argv[1]
-    output_data_filepath = sys.argv[1]
+    output_data_filepath = sys.argv[2]
     data = read_data(input_data_filepath)
 
     state = Datum.from_dict(data[-1])
@@ -366,7 +367,7 @@ if __name__ == '__main__':
 
             
     except EOFError:
-        print 'Exiting'
+        print >> stderr, 'Exiting'
         with open(output_data_filepath, 'w') as fh:
             json.dump(data, fh, indent=2)
         
