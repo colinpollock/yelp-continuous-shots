@@ -4,7 +4,7 @@
 from __future__ import division
 
 import itertools
-import simplejson as json
+import json
 import math
 import os
 import sys
@@ -14,7 +14,6 @@ from collections import defaultdict, namedtuple
 from operator import itemgetter
 from sys import stderr
 
-from ipdb import set_trace
 
 datum_fields = (
     # Timestamp for when user hit y/n
@@ -35,14 +34,14 @@ datum_fields = (
     'bank',
 
     # What we want the bank to start at each round.
-    'target_bank', 
+    'target_bank',
 
     # Bailout funds available after the shot.
     'bailout_funds',
-    
+
     # Bailout funds used after the shot.
     'bailout_funds_used',
-    
+
     # dict from username to money won.
     'winnings',
 
@@ -51,7 +50,7 @@ datum_fields = (
 
     # How many shots have been taken overall.
     'shots',
-    
+
     # How many of those shots were hits.
     'hits')
 
@@ -150,7 +149,7 @@ def calculate_bank_proportion(
         if expected_money_made >= money_needed:
             return bank_proportion
 
-    # If we get out of the loop it means that even if we put a large proportion 
+    # If we get out of the loop it means that even if we put a large proportion
     # of cost of each shot into the bank we can't get enough. We can just return
     # the high proportion.
     return bank_proportion
@@ -200,7 +199,7 @@ def show_debug(state):
     print '# Dues #'
     print user_to_cost_str(state.dues)
     print
-    
+
 
 if __name__ == '__main__':
     input_data_filepath = sys.argv[1]
@@ -365,12 +364,12 @@ if __name__ == '__main__':
 #            set_trace()
 #            assert abs(first - second) < .01
 
-            
+
     except EOFError:
         print >> stderr, 'Exiting'
         with open(output_data_filepath, 'w') as fh:
             json.dump(data, fh, indent=2)
-        
+
 
 # TODO: rewrite the main loop to handle exits cleanly
 # TODO: serialize everything so that we don't lose track of money
