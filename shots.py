@@ -225,8 +225,8 @@ if __name__ == '__main__':
 
             cost = calc_cost(hits, shots, pot)
 
-            print 'Pay $%.2f for a chance to win $%.2f' % (cost, pot)
-            username = raw_input('Who are you (C to cancel)? ').strip()
+            print 'Take a shot right now for $%.2f. Win $%.2f if you hit the bell.' % (cost, pot)
+            username = raw_input('What is your username (C to cancel)? ').strip()
             if username.lower() == 'c':
                 continue
 
@@ -236,7 +236,7 @@ if __name__ == '__main__':
                 continue
 
 
-            hit_response = raw_input('Did you hit it (y/n/cancel)? ')
+            hit_response = raw_input('Did you hit the bell (y/n/cancel)? ')
             if hit_response not in ('y', 'n'):
                 print >> sys.stderr, 'y or n plz'
                 continue
